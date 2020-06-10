@@ -123,7 +123,7 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         self.scs = nn.Parameter(torch.FloatTensor([-4.15, -4.15, -4.15]))
         self.sis = nn.Parameter(torch.FloatTensor([-2.30, -2.30, -2.30]))        
         self.bbox_lossf = nn.SmoothL1Loss()
-        self.clas_lossf = nn.CrossEntropyLoss(ignore_index=-1)      # excluding no-identifier samples
+        self.clas_lossf = nn.BCEWithLogitsLoss()
         self.iden_lossf = nn.CrossEntropyLoss(ignore_index=-1)
         self.iden_thresh = 0.5  # identifier threshold
         self.frgd_thresh = 0.5  # foreground confidence threshold
@@ -147,16 +147,15 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         outputs = super().forward(xs)
         pbboxes = [output[0][..., : 4] for output in outputs]                           # n*a*h*w*4
         pclasss = [output[0][..., 4 :] for output in outputs]                           # n*a*h*w*2
-        pclasss = [pclass.permute(0, 4, 1, 2, 3).contiguous() for pclass in pclasss]    # n*2*a*h*w
         pembeds = [output[1] for output in outputs]                                     # n*h*w*512
         
         # build targets for three heads
         batch_size = xs[0].size(0)
         gsizes = [list(output[0].shape[2:4]) for output in outputs]
-        tbboxes, tclasss, tidents = self._build_targets(batch_size, targets, gsizes)
+        tbboxes, tclasss, tidents, nonignores = self._build_targets(batch_size, targets, gsizes)
         
         # select predictions and truths based on object mask
-        masks = [tc > 0 for tc in tclasss]                                          # n*a*h*w
+        masks = [tc[..., 1:].max(dim=-1) > 0 for tc in tclasss]                     # n*a*h*w
         obj_masks = [mask.max(1)[0] for mask in masks]                              # n*h*w
         tidents = [tident.max(1)[0] for tident in tidents]                          # n*h*w
         tidents = [tident[m] for tident, m in zip(tidents, obj_masks)]              # x
@@ -169,7 +168,8 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
             if m.sum() > 0:
                 lbboxes[i] = self.bbox_lossf(pb[m], tb[m])                          # x*4
 
-        lclasss = [self.clas_lossf(pc, tc) for pc, tc in zip(pclasss, tclasss)]        
+        lclasss = [self.clas_lossf(pc[m], tc[m]) for pc, tc, m in zip(
+            pclasss, tclasss, nonignores)]        
         lidents = [self.FloatTensor([0])] * len(pembeds)
         for i, (pembed, tident) in enumerate(zip(pembeds, tidents)):
             if pembed.size(0) > 0:
@@ -204,17 +204,20 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
                 [height, width], ...]
         Returns:
             tbboxes: truth boundding boxes. the shape is n*a*h*w*4
-            tclasss: truth confidences. the shape is n*a*h*w
+            tclasss: truth confidences. the shape is n*a*h*w*(num_classes+1)
             tidents: truth identifiers. the shape is n*a*h*w*1
         '''
-        a = self.anchor_masks.size(1)        
+        a = self.anchor_masks.size(1)
+        c = self.num_classes + 1
         tbboxes = [self.FloatTensor(n, a, h, w, 4).fill_(0) for h, w in gsizes]
-        tclasss = [self.LongTensor(n, a, h, w).fill_(0) for h, w in gsizes]
+        tclasss = [self.LongTensor(n, a, h, w, c).fill_(0) for h, w in gsizes]
         tidents = [self.LongTensor(n, a, h, w).fill_(-1) for h, w in gsizes]
-        if targets.size == 0:
-            return tbboxes, tclasss, tidents
+        nonignores = [self.LongTensor([]) for _ in range(self.anchor_masks.size(0))]
+        if targets.size(0) == 0:
+            return tbboxes, tclasss, tidents, nonignores
 
-        batch, identifier, xywh = targets[:, 0].long(), targets[:, 2].long(), targets[:, 3:]
+        batch, category, identifier, xywh = targets[:, 0].long(), targets[:, 1].long(),
+            targets[:, 2].long(), targets[:, 3:]
         for layer, (amask, (h, w)) in enumerate(zip(self.anchor_masks, gsizes)):
             # ground truth boundding boxes
             xywh = targets[:, 3:] * self.FloatTensor([w, h, w, h])
@@ -233,12 +236,12 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
             keep_iden = values > self.iden_thresh                                   # n*a*h*w
             keep_frgn = values > self.frgd_thresh
             keep_bkgn = values < self.bkgd_thresh
-            ignore    = (values > self.bkgd_thresh) & (values < self.frgd_thresh)
+            nonignores[layer] = (values < self.bkgd_thresh) | (values > self.frgd_thresh)
             
             # set object confidence truths
-            tclasss[layer][keep_frgn] =  1
-            tclasss[layer][keep_bkgn] =  0
-            tclasss[layer][ignore]    = -1
+            rows = torch.arange(keep_frgn.sum())
+            tclasss[layer][keep_frgn][rows, category[indices[keep_frgn]]] =  1
+            tclasss[layer][keep_bkgn][:, 0] = 1
 
             # every image has different number of matched boxes and identifiers
             for i in range(n):
@@ -248,7 +251,7 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
                 ab = anchor_boxes.view(a, h, w, 4)[keep_frgn[i]]                    # ti*4
                 tbboxes[layer][i][keep_frgn[i]] = self._encode_bbox(tb, ab)
 
-        return tbboxes, tclasss, tidents
+        return tbboxes, tclasss, tidents, nonignores
     
     def _make_anchor_boxes(self, h, w, anchors):
         '''make anchor boxes.
