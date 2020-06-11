@@ -59,8 +59,7 @@ class YOLOv3SingleDecoder(torch.nn.Module):
         if self.training:
             return xywhoc, embedding
         else:
-            xywhoc[..., 4:] = torch.softmax(xywhoc[..., 4:], dim=-1)[...,[1,0]]
-            xywhoc[..., 5] = 0            
+            xywhoc[..., 4:] = torch.sigmoid(xywhoc[..., 4:])           
             aw = anchors[:, 0].view(1, num_anchors, 1, 1)
             ah = anchors[:, 1].view(1, num_anchors, 1, 1)           
             [gy, gx] = torch.meshgrid(torch.arange(h), torch.arange(w))        
