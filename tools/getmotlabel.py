@@ -5,9 +5,9 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description='convert MOT format '
         'labels to format like [class_id, identifier, x, y, w, h]')
-    parser.add_argument('--root-dir', type=str, help=
+    parser.add_argument('--root-dir', type=str, default='datasets/MOT16/train', help=
         'path to the MOT dataset root directory')
-    parser.add_argument('--save-dir', type=str, default='', help=
+    parser.add_argument('--save-dir', type=str, default='datasets/MOT16/train', help=
         'path to the generated label file')
     return parser.parse_args()
 

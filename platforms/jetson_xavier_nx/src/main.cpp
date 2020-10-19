@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
     
     srand(time(NULL));
     for (int i = 0; i < dims0.numel(); ++i) {
-        in.get()[i] = (float)rand() / RAND_MAX;
+        in.get()[i] = 1.f;// (float)rand() / RAND_MAX;
     }
     
     // Saving input for comparing with pytorch baseline

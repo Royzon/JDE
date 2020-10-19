@@ -233,11 +233,40 @@ class ShuffleNetV2(torch.nn.Module):
         
         return outputs
 
-if __name__ == '__main__':
-    anchors = np.random.randint(low=10, high=150, size=(12,2))
-    model = ShuffleNetV2(anchors, model_size='0.5x')
+def save_model():
+    anchors = np.random.randint(low=10, high=150, size=(12, 2))
+    model = ShuffleNetV2(anchors, model_size='0.5x').to('cuda:0')
     model.eval()
-    x = torch.rand(1, 3, 320, 576)
+    x = torch.ones(1, 3, 320, 576).to('cuda:0')
     ys = model(x)
-    for i,y in enumerate(ys):
-        print(f'the {i+1}th output size is {y.size()}')
+    for i, y in enumerate(ys):
+        print(f'the {i + 1}th output shape is {y.shape}, output data is:\n{y}\n')
+    torch.save(model, "workspace/tmp/jde_shufflenetv2.pth")
+
+def inference_model():
+    import struct
+    print('cuda device count: ', torch.cuda.device_count())
+    model = torch.load('workspace/tmp/jde_shufflenetv2.pth').to('cuda:0')
+    model.eval()
+    # print('model: ', net)
+    # print('state dict: ', net.state_dict()['conv1.weight'])
+    x = torch.ones(1, 3, 320, 576).to('cuda:0')
+    # print('input: ', x)
+    out = model(x)
+    print('jde_shufflenetv2 out:', out)
+
+    f = open("workspace/tmp/jde_shufflenetv2.wts", 'w')
+    f.write("{}\n".format(len(model.state_dict().keys())))
+    for k, v in model.state_dict().items():
+        # print('key: ', k)
+        # print('value: ', v.shape)
+        vr = v.reshape(-1).cpu().numpy()
+        f.write("{} {}".format(k, len(vr)))
+        for vv in vr:
+            f.write(" ")
+            f.write(struct.pack(">f", float(vv)).hex())
+        f.write("\n")
+
+if __name__ == '__main__':
+    save_model()
+    # inference_model()

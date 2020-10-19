@@ -5,8 +5,9 @@
 #include <algorithm>
 #include <limits>
 #include <cmath>
+#if __ARM_NEON && (!DISABLE_NEON)
 #include <arm_neon.h>
-
+#endif
 #include "utils.h"
 #include "jdecoder.h"
 

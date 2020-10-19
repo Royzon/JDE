@@ -2,7 +2,7 @@
 #define JDECODERV2_H_
 
 #include <vector>
-
+#include <memory>
 #include <NvInfer.h>
 
 namespace nvinfer1 {

@@ -179,7 +179,7 @@ bool JDE::create_network_from_scratch(void)
     
     // 读取模型权重
     wts_weights_t weights;
-    if (!load_weights("./jde.wts", weights)) {
+    if (!load_weights("../../../workspace/tmp/jde_shufflenetv2.wts", weights)) {
         return false;
     }
     
