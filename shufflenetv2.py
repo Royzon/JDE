@@ -268,5 +268,5 @@ def inference_model():
         f.write("\n")
 
 if __name__ == '__main__':
-    save_model()
-    # inference_model()
+    # save_model()
+    inference_model()

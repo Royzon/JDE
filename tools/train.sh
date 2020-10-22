@@ -1,8 +1,9 @@
 #!/bin/bash
 
-python3 train.py \
+python train.py \
     --in-size 320 576 \
-    --dataset workspace/mot16-20201011/ \
+    --checkpoint workspace/mot16-2020-5-28/jde.pth \
+    --dataset workspace/mot16-2020-5-28/ \
     --scale-step 224 512 10 480 768 \
     --rescale-freq 99999999 \
     --workers 8 \
@@ -12,5 +13,4 @@ python3 train.py \
     --weight-decay 0.0001 \
     --savename jde \
     --pin \
-    --workspace workspace/mot16-20201011/ \
-    --backbone shufflenetv2
+    --workspace workspace/mot16-2020-5-28/
